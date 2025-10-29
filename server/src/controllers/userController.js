@@ -7,7 +7,6 @@ import { User } from '../models/User.js';
 import { Article } from '../models/Article.js';
 import { SavedArticle } from '../models/SavedArticle.js';
 import { cacheService } from '../services/cacheService.js';
-import { analyticsService } from '../services/analyticsService.js';
 import { paginator } from '../utils/paginator.js';
 import { logger } from '../config/logger.js';
 import { AppError } from '../middleware/errorHandler.js';
@@ -316,7 +315,25 @@ export const getUserAnalytics = catchAsync(async (req, res) => {
     );
   }
 
-  const analytics = await analyticsService.getUserEngagement(userId, parseInt(period));
+  // Simplified analytics without analyticsService
+  const savedArticles = await SavedArticle.find({ userId })
+    .select('savedAt category')
+    .limit(1000)
+    .lean();
+
+  const analytics = {
+    totalArticles: savedArticles.length,
+    period: parseInt(period),
+    categoryBreakdown: {},
+    generatedAt: new Date().toISOString()
+  };
+
+  savedArticles.forEach(article => {
+    if (article.category) {
+      analytics.categoryBreakdown[article.category] = 
+        (analytics.categoryBreakdown[article.category] || 0) + 1;
+    }
+  });
 
   res.status(HTTP_STATUS.OK).json(analytics);
 });

@@ -8,7 +8,6 @@ import { createServer } from 'http';
 import { logger } from './config/logger.js';
 import { connectToDatabase } from './config/db.js';
 import { connectRedis } from './config/redis.js';
-import { startScheduledJobs } from './jobs/index.js';
 import app from './app.js';
 
 // Load environment variables
@@ -72,12 +71,6 @@ async function startServer() {
     // Connect to Redis
     await connectRedis();
     logger.info('Connected to Redis');
-
-    // Start scheduled jobs
-    if (NODE_ENV === 'production') {
-      startScheduledJobs();
-      logger.info('Scheduled jobs started');
-    }
 
     // Create HTTP server
     const server = createServer(app);

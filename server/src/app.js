@@ -16,8 +16,6 @@ import { rateLimiter } from './middleware/rateLimiter.js';
 import authRoutes from './routes/auth.js';
 import articleRoutes from './routes/articles.js';
 import userRoutes from './routes/users.js';
-import statsRoutes from './routes/stats.js';
-import adminRoutes from './routes/admin.js';
 import liveNewsRoutes from './routes/liveNews.js';
 
 const app = express();
@@ -90,8 +88,6 @@ app.get('/api/health', (req, res) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/articles', articleRoutes);
 app.use('/api/users', userRoutes);
-app.use('/api/stats', statsRoutes);
-app.use('/api/admin', adminRoutes);
 app.use('/api/live-news', liveNewsRoutes);
 
 // Root endpoint

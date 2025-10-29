@@ -70,8 +70,11 @@ export default function Feed() {
 
   const loadLiveNews = async (reset = false) => {
     try {
+      // Use 'general' for 'all' category or empty category
+      const categoryToUse = !filters.category || filters.category === 'all' ? 'general' : filters.category;
+      
       const params = {
-        category: filters.category || 'general',
+        category: categoryToUse,
         query: filters.search,
         limit: 50,
         useCache: true
