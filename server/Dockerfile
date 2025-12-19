@@ -17,6 +17,9 @@ COPY . .
 RUN addgroup -g 1001 -S nodejs
 RUN adduser -S nextjs -u 1001
 
+# Create logs directory with proper permissions
+RUN mkdir -p /app/logs && chown -R nextjs:nodejs /app/logs
+
 # Change ownership of the app directory
 RUN chown -R nextjs:nodejs /app
 USER nextjs
