@@ -16,6 +16,16 @@ docker-compose down
 echo "🔄 Pulling latest code..."
 git pull origin main
 
+# Ensure host permissions for backend bind mount
+echo "🔐 Fixing host permissions for backend..."
+mkdir -p server/logs
+if command -v sudo >/dev/null 2>&1; then
+    SUDO="sudo"
+else
+    SUDO=""
+fi
+$SUDO chown -R 1001:1001 server || echo "⚠️  Unable to chown server directory (continuing)"
+
 # Fix the Dockerfile if logs directory line is missing
 echo "🔍 Checking Dockerfile..."
 if ! grep -q "mkdir -p /app/logs" server/Dockerfile; then
@@ -59,7 +69,7 @@ docker-compose ps
 # Check backend logs
 echo ""
 echo "📝 Backend logs (last 20 lines):"
-docker-compose logs --tail=20 news-backend
+docker-compose logs --tail=20 backend
 
 # Test health endpoint
 echo ""
