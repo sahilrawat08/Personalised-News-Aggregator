@@ -16,6 +16,21 @@ docker-compose down
 echo "🔄 Pulling latest code..."
 git pull origin main
 
+# Fix the Dockerfile if logs directory line is missing
+echo "🔍 Checking Dockerfile..."
+if ! grep -q "mkdir -p /app/logs" server/Dockerfile; then
+    echo "⚠️  Dockerfile needs updating..."
+    # Backup original
+    cp server/Dockerfile server/Dockerfile.backup
+    
+    # Add logs directory creation after user creation
+    sed -i '/RUN adduser -S nextjs -u 1001/a \\n# Create logs directory with proper permissions\nRUN mkdir -p /app/logs \&\& chown -R nextjs:nodejs /app/logs' server/Dockerfile
+    
+    echo "✅ Dockerfile updated"
+else
+    echo "✅ Dockerfile already has logs directory fix"
+fi
+
 # Update .env file with EC2 IP
 echo "⚙️  Updating environment configuration..."
 EC2_IP=$(curl -s http://169.254.169.254/latest/meta-data/public-ipv4)
