@@ -1,7 +1,3 @@
-/**
- * Server entry point for Personalized News Aggregator - Sigma Edition
- * Production-ready backend with comprehensive features
- */
 
 import dotenv from 'dotenv';
 import { createServer } from 'http';

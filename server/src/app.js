@@ -1,8 +1,3 @@
-/**
- * Express application setup for Personalized News Aggregator - Sigma Edition
- * Comprehensive middleware configuration and route setup
- */
-
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
@@ -39,7 +34,10 @@ const corsOptions = {
     const allowedOrigins = [
       process.env.CORS_ORIGIN || 'http://localhost:5173',
       'http://localhost:3000',
-      'http://localhost:5174'
+      'http://localhost:5174',
+      'http://localhost',
+      'http://localhost:80',
+      'https://localhost'
     ];
     
     // Allow requests with no origin (mobile apps, curl, etc.)

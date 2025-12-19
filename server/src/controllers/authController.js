@@ -187,7 +187,7 @@ export const refreshToken = catchAsync(async (req, res) => {
  */
 export const logout = catchAsync(async (req, res) => {
   logger.info(`User logged out: ${req.user._id}`);
-
+  console.log(`User logged out: ${req.user._id}`);
   res.status(HTTP_STATUS.OK).json({
     message: 'Logout successful'
   });
