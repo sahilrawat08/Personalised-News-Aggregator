@@ -45,28 +45,36 @@ transports.push(
   })
 );
 
-// File transports for production
-if (NODE_ENV === 'production') {
-  // Error log file
-  transports.push(
-    new winston.transports.File({
-      filename: path.join(process.cwd(), 'logs', 'error.log'),
-      level: 'error',
-      format: logFormat,
-      maxsize: 5242880, // 5MB
-      maxFiles: 5
-    })
-  );
+// File transports for production (skip in serverless environments)
+// Vercel and other serverless platforms don't support file system writes
+const isServerless = process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME || process.env.VERCEL_ENV;
 
-  // Combined log file
-  transports.push(
-    new winston.transports.File({
-      filename: path.join(process.cwd(), 'logs', 'combined.log'),
-      format: logFormat,
-      maxsize: 5242880, // 5MB
-      maxFiles: 5
-    })
-  );
+if (NODE_ENV === 'production' && !isServerless) {
+  // Error log file
+  try {
+    transports.push(
+      new winston.transports.File({
+        filename: path.join(process.cwd(), 'logs', 'error.log'),
+        level: 'error',
+        format: logFormat,
+        maxsize: 5242880, // 5MB
+        maxFiles: 5
+      })
+    );
+
+    // Combined log file
+    transports.push(
+      new winston.transports.File({
+        filename: path.join(process.cwd(), 'logs', 'combined.log'),
+        format: logFormat,
+        maxsize: 5242880, // 5MB
+        maxFiles: 5
+      })
+    );
+  } catch (error) {
+    // If file system is not available (serverless), skip file transports
+    console.warn('File logging not available, using console only');
+  }
 }
 
 // Create logger instance

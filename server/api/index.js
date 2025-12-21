@@ -9,43 +9,114 @@ dotenv.config();
 import app from '../src/app.js';
 import { connectToDatabase } from '../src/config/db.js';
 import { connectRedis } from '../src/config/redis.js';
+import mongoose from 'mongoose';
 
-// Connect to database and Redis on cold start
-let dbConnected = false;
-let redisConnected = false;
+// Connection state
+let connectionPromise = null;
+let isConnecting = false;
 
+/**
+ * Ensure database and Redis connections
+ * Uses connection pooling to avoid creating multiple connections
+ */
 async function ensureConnections() {
-  try {
-    if (!dbConnected) {
-      await connectToDatabase();
-      dbConnected = true;
-    }
-    // Redis is optional - gracefully handle failures
-    if (!redisConnected) {
+  // Check if already connected
+  if (mongoose.connection.readyState === 1) {
+    return true;
+  }
+
+  // If connection is in progress, wait for it
+  if (connectionPromise) {
+    return connectionPromise;
+  }
+
+  // Prevent multiple simultaneous connection attempts
+  if (isConnecting) {
+    return new Promise((resolve) => {
+      const checkInterval = setInterval(() => {
+        if (!isConnecting && mongoose.connection.readyState === 1) {
+          clearInterval(checkInterval);
+          resolve(true);
+        }
+      }, 100);
+    });
+  }
+
+  isConnecting = true;
+
+  // Start new connection
+  connectionPromise = (async () => {
+    try {
+      // Connect to MongoDB
+      if (mongoose.connection.readyState !== 1) {
+        try {
+          await connectToDatabase();
+          console.log('[Vercel] Database connected');
+        } catch (dbError) {
+          console.error('[Vercel] Database connection error:', dbError.message);
+          // Don't throw - allow function to proceed
+        }
+      }
+
+      // Connect to Redis (optional)
       try {
         await connectRedis();
-        redisConnected = true;
-      } catch (error) {
-        console.warn('Redis connection failed (optional):', error.message);
+        console.log('[Vercel] Redis connected (optional)');
+      } catch (redisError) {
+        // Redis is optional, continue without it
+        console.warn('[Vercel] Redis not available (optional):', redisError.message);
       }
-    }
-  } catch (error) {
-    console.error('Connection error:', error);
-    // Don't throw - allow function to proceed even if connections fail initially
-    // Connections will be retried on next request
-  }
-}
 
-// Initialize connections once
-ensureConnections().catch(console.error);
+      return true;
+    } catch (error) {
+      console.error('[Vercel] Connection setup error:', error.message);
+      return false;
+    } finally {
+      isConnecting = false;
+    }
+  })();
+
+  return connectionPromise;
+}
 
 // Vercel serverless function handler
 export default async function handler(req, res) {
-  // Ensure database and Redis connections (retry if needed)
-  await ensureConnections();
-  
-  // Handle the request with Express app
-  // Note: Vercel's @vercel/node runtime handles Express apps automatically
-  return app(req, res);
+  try {
+    // Ensure connections (non-blocking, won't fail the request if DB is down)
+    await ensureConnections().catch(err => {
+      console.error('[Vercel] Connection check failed:', err.message);
+      // Continue anyway - connections may already be established or will retry
+    });
+
+    // Handle the request with Express app
+    // Express will handle the request/response cycle
+    app(req, res, (err) => {
+      if (err) {
+        console.error('[Vercel] Express error:', err);
+        if (!res.headersSent) {
+          return res.status(500).json({
+            error: {
+              message: 'Internal server error',
+              code: 'EXPRESS_ERROR'
+            }
+          });
+        }
+      }
+    });
+  } catch (error) {
+    console.error('[Vercel] Handler error:', error);
+    console.error('[Vercel] Error stack:', error.stack);
+    
+    // Return error response if headers not sent
+    if (!res.headersSent) {
+      return res.status(500).json({
+        error: {
+          message: error.message || 'Internal server error',
+          code: 'FUNCTION_ERROR',
+          stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+        }
+      });
+    }
+  }
 }
 
