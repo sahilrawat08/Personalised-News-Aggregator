@@ -13,24 +13,56 @@ import { logger } from '../config/logger.js';
  */
 class RedisStore {
   constructor() {
-    this.redis = getRedis();
+    try {
+      this.redis = getRedis();
+      // Fallback to in-memory store if Redis is not available
+      this.memoryStore = this.redis ? null : new Map();
+    } catch (error) {
+      logger.warn('Redis not available for rate limiting, using in-memory store');
+      this.redis = null;
+      this.memoryStore = new Map();
+    }
   }
 
   async increment(key, windowMs) {
     try {
-      const pipeline = this.redis.pipeline();
-      pipeline.incr(key);
-      pipeline.expire(key, Math.ceil(windowMs / 1000));
+      // Use Redis if available
+      if (this.redis) {
+        const pipeline = this.redis.pipeline();
+        pipeline.incr(key);
+        pipeline.expire(key, Math.ceil(windowMs / 1000));
+        
+        const results = await pipeline.exec();
+        const hits = results[0][1];
+        
+        return {
+          totalHits: hits,
+          timeRemaining: await this.redis.ttl(key)
+        };
+      }
       
-      const results = await pipeline.exec();
-      const hits = results[0][1];
+      // Fallback to in-memory store
+      if (this.memoryStore) {
+        const now = Date.now();
+        const record = this.memoryStore.get(key);
+        
+        if (!record || now > record.resetTime) {
+          this.memoryStore.set(key, {
+            count: 1,
+            resetTime: now + windowMs
+          });
+          return { totalHits: 1, timeRemaining: Math.ceil(windowMs / 1000) };
+        }
+        
+        record.count++;
+        const timeRemaining = Math.ceil((record.resetTime - now) / 1000);
+        return { totalHits: record.count, timeRemaining };
+      }
       
-      return {
-        totalHits: hits,
-        timeRemaining: await this.redis.ttl(key)
-      };
+      // If neither Redis nor memory store available, allow request
+      return { totalHits: 1, timeRemaining: 1 };
     } catch (error) {
-      logger.error('Redis rate limit error:', error);
+      logger.error('Rate limit error:', error);
       // Fallback to allowing the request
       return { totalHits: 1, timeRemaining: 1 };
     }
@@ -38,17 +70,28 @@ class RedisStore {
 
   async decrement(key) {
     try {
-      await this.redis.decr(key);
+      if (this.redis) {
+        await this.redis.decr(key);
+      } else if (this.memoryStore) {
+        const record = this.memoryStore.get(key);
+        if (record && record.count > 0) {
+          record.count--;
+        }
+      }
     } catch (error) {
-      logger.error('Redis rate limit decrement error:', error);
+      logger.error('Rate limit decrement error:', error);
     }
   }
 
   async resetKey(key) {
     try {
-      await this.redis.del(key);
+      if (this.redis) {
+        await this.redis.del(key);
+      } else if (this.memoryStore) {
+        this.memoryStore.delete(key);
+      }
     } catch (error) {
-      logger.error('Redis rate limit reset error:', error);
+      logger.error('Rate limit reset error:', error);
     }
   }
 }
@@ -204,8 +247,10 @@ export const createEndpointRateLimiter = (endpoint, options = {}) => {
 export const resetRateLimit = async (key) => {
   try {
     const redis = getRedis();
-    await redis.del(key);
-    logger.info(`Rate limit reset for key: ${key}`);
+    if (redis) {
+      await redis.del(key);
+      logger.info(`Rate limit reset for key: ${key}`);
+    }
   } catch (error) {
     logger.error('Error resetting rate limit:', error);
   }
@@ -217,15 +262,18 @@ export const resetRateLimit = async (key) => {
 export const getRateLimitInfo = async (key) => {
   try {
     const redis = getRedis();
-    const hits = await redis.get(key);
-    const ttl = await redis.ttl(key);
-    
-    return {
-      hits: hits ? parseInt(hits) : 0,
-      timeRemaining: ttl > 0 ? ttl : 0,
-      limit: RATE_LIMITS.MAX_REQUESTS,
-      windowMs: RATE_LIMITS.WINDOW_MS
-    };
+    if (redis) {
+      const hits = await redis.get(key);
+      const ttl = await redis.ttl(key);
+      
+      return {
+        hits: hits ? parseInt(hits) : 0,
+        timeRemaining: ttl > 0 ? ttl : 0,
+        limit: RATE_LIMITS.MAX_REQUESTS,
+        windowMs: RATE_LIMITS.WINDOW_MS
+      };
+    }
+    return null;
   } catch (error) {
     logger.error('Error getting rate limit info:', error);
     return null;

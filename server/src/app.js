@@ -31,8 +31,15 @@ app.use(helmet({
 // CORS configuration
 const corsOptions = {
   origin: function (origin, callback) {
+    // Get allowed origins from environment variable (comma-separated) or use defaults
+    const corsOrigins = process.env.CORS_ORIGIN 
+      ? process.env.CORS_ORIGIN.split(',').map(origin => origin.trim())
+      : [];
+    
     const allowedOrigins = [
-      process.env.CORS_ORIGIN || 'http://localhost:5173',
+      ...corsOrigins,
+      // Development origins
+      'http://localhost:5173',
       'http://localhost:3000',
       'http://localhost:5174',
       'http://localhost',
@@ -43,7 +50,17 @@ const corsOptions = {
     // Allow requests with no origin (mobile apps, curl, etc.)
     if (!origin) return callback(null, true);
     
-    if (allowedOrigins.indexOf(origin) !== -1) {
+    // Check if origin is in allowed list
+    const isAllowed = allowedOrigins.some(allowedOrigin => {
+      // Support wildcard subdomains (e.g., *.vercel.app)
+      if (allowedOrigin.includes('*')) {
+        const pattern = allowedOrigin.replace('*', '.*');
+        return new RegExp(`^${pattern}$`).test(origin);
+      }
+      return origin === allowedOrigin;
+    });
+    
+    if (isAllowed) {
       callback(null, true);
     } else {
       logger.warn(`CORS blocked origin: ${origin}`);

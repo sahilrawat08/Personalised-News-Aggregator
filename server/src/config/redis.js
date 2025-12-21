@@ -60,6 +60,12 @@ export function createRedisConnection() {
  */
 export async function connectRedis() {
   try {
+    // Skip Redis connection if URL is not provided (optional for deployment)
+    if (!REDIS_URL || REDIS_URL === 'redis://localhost:6379') {
+      logger.warn('Redis URL not configured, skipping Redis connection');
+      return null;
+    }
+
     if (!redis) {
       redis = createRedisConnection();
     }
@@ -69,8 +75,9 @@ export async function connectRedis() {
     
     return redis;
   } catch (error) {
-    logger.error('Failed to connect to Redis:', error);
-    throw error;
+    logger.warn('Failed to connect to Redis (optional):', error.message);
+    // Return null instead of throwing - Redis is optional
+    return null;
   }
 }
 
