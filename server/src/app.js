@@ -33,7 +33,7 @@ const corsOptions = {
   origin: function (origin, callback) {
     // Get allowed origins from environment variable (comma-separated) or use defaults
     const corsOrigins = process.env.CORS_ORIGIN 
-      ? process.env.CORS_ORIGIN.split(',').map(origin => origin.trim())
+      ? process.env.CORS_ORIGIN.split(',').map(orig => orig.trim())
       : [];
     
     const allowedOrigins = [
@@ -44,7 +44,9 @@ const corsOptions = {
       'http://localhost:5174',
       'http://localhost',
       'http://localhost:80',
-      'https://localhost'
+      'https://localhost',
+      // Allow all Vercel preview deployments by default
+      /^https:\/\/.*\.vercel\.app$/
     ];
     
     // Allow requests with no origin (mobile apps, curl, etc.)
@@ -52,9 +54,13 @@ const corsOptions = {
     
     // Check if origin is in allowed list
     const isAllowed = allowedOrigins.some(allowedOrigin => {
+      // Support regex patterns
+      if (allowedOrigin instanceof RegExp) {
+        return allowedOrigin.test(origin);
+      }
       // Support wildcard subdomains (e.g., *.vercel.app)
       if (allowedOrigin.includes('*')) {
-        const pattern = allowedOrigin.replace('*', '.*');
+        const pattern = allowedOrigin.replace(/\*/g, '.*');
         return new RegExp(`^${pattern}$`).test(origin);
       }
       return origin === allowedOrigin;
@@ -64,12 +70,19 @@ const corsOptions = {
       callback(null, true);
     } else {
       logger.warn(`CORS blocked origin: ${origin}`);
-      callback(new Error('Not allowed by CORS'));
+      // In development, allow all origins for easier debugging
+      if (process.env.NODE_ENV === 'development') {
+        callback(null, true);
+      } else {
+        callback(new Error('Not allowed by CORS'));
+      }
     }
   },
   credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+  exposedHeaders: ['Content-Range', 'X-Content-Range'],
+  maxAge: 86400 // 24 hours
 };
 
 app.use(cors(corsOptions));
